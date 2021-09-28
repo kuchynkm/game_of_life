@@ -103,13 +103,15 @@ class EntryFrame(tk.Frame):
 
 class Grid(tk.Canvas):
     def __init__(self, master, size, num_units, background, edge_color, *args, **kwargs):
-        super(Grid, self).__init__(master, width=size, height=size, *args, **kwargs)
+        super(Grid, self).__init__(master, width=size + 1, height=size + 1, *args, **kwargs)
         self.background = background
         self.edge_color = edge_color
         self.num_units = num_units
         self.unit_size = size / num_units
 
     def show_grid(self):
+        self.delete("all")
+
         for row in range(self.num_units):
             for col in range(self.num_units):
                 self.draw_unit(row, col, color=self.background)

@@ -8,6 +8,7 @@ authors = ["Martin Kuchynka <kuchynkm@gmail.com>"]
 python = "^3.8"
 loguru = "^0.5.3"
 numpy = "1.20"
+Pillow = "^8.3.2"
 
 [tool.poetry.dev-dependencies]
 pytest = "^5.2"
