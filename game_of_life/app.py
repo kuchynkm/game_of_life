@@ -4,16 +4,17 @@ import numpy as np
 import tkinter as tk
 from tkinter import ttk
 from PIL import ImageTk, Image
+from scipy.signal import convolve2d
 
 from game_of_life.gui_elements import MenuBar, Grid
 
 
 # TODO move to config
-GRID_SIZE = 600
-NUM_UNITS = 50
-BACKGROUND = "white"
-EDGE_COLOR = "silver"
-CELL_COLOR = "black"
+GRID_SIZE = 720
+NUM_UNITS = 75
+BACKGROUND = "#ff00ff"
+EDGE_COLOR = "grey"
+CELL_COLOR = "#34aeeb"
 
 
 class GameOfLifeApp(tk.Tk):
@@ -21,9 +22,15 @@ class GameOfLifeApp(tk.Tk):
         super().__init__()
         # GUI widgets
         self.init_gui()
-        self.init_cells()
-        self.refresh()
         self.update()
+
+        # cells etc.
+        self.kernel = np.array([[1, 1, 1], [1, 0, 1], [1, 1, 1]])
+        self.new_cells = None
+        self.cells = None
+        self.img = None
+
+        self.init_game()
 
     def init_gui(self):
         # window settings
@@ -33,7 +40,7 @@ class GameOfLifeApp(tk.Tk):
         # file menu
         self.menu_bar = MenuBar(self)
 
-        # canvas
+        # grid canvas
         self.grid = Grid(
             master=self,
             size=GRID_SIZE,
@@ -42,52 +49,39 @@ class GameOfLifeApp(tk.Tk):
             edge_color=EDGE_COLOR,
             highlightthickness=0
         )
-        self.grid.pack()
         self.grid.grid(row=0, column=0, columnspan=2)
+        self.grid.pack()
 
-    def init_cells(self):
+    def init_game(self):
         self.new_cells = np.random.randint(2, size=(NUM_UNITS, NUM_UNITS))
+        self.grid.show_grid()
         self.draw_cells()
+        self.refresh()
 
     def draw_cells(self):
         image = Image.fromarray(255 * (1 - self.new_cells.astype(np.uint8)))
         image = image.resize((GRID_SIZE, GRID_SIZE), Image.NEAREST)
         self.img = ImageTk.PhotoImage(image)
-        self.grid.create_image(0, 0, anchor=tk.NW, image=self.img)
+        self.grid.itemconfig("cells", image=self.img)
+        self.grid.tag_lower("cells")
 
-    def count_cell_neighbors(self, row, col):
-        total = 0
+    def count_neighbors(self):
+        """Calculate number of alive neighbors for each cell in the matrix."""
+        return convolve2d(self.cells, self.kernel, mode='same')
 
-        for i in range(-1, 2):
-            for j in range(-1, 2):
-                neighbor_row = (row + i + NUM_UNITS) % NUM_UNITS
-                neighbor_col = (col + j + NUM_UNITS) % NUM_UNITS
-                total += self.cells[neighbor_row, neighbor_col]
+    def update_cell_status(self):
+        """Update cell's dead or alive status based on current status."""
+        neighbors = self.count_neighbors()
 
-        total -= self.cells[row, col]
+        should_die = (self.cells == 1) & ((neighbors > 3) | (neighbors < 2))
+        should_live = (self.cells == 0) & (neighbors == 3)
 
-        return total
-
-    def update_cell_status(self, row, col):
-
-        num_neighbors = self.count_cell_neighbors(row, col)
-
-        if self.cells[row, col]:
-            # cell is alive
-            if num_neighbors < 2 or num_neighbors > 3:
-                # cell should die
-                self.new_cells[row, col] = 0
-        else:
-            # cell is dead
-            if num_neighbors == 3:
-                self.new_cells[row, col] = 1
+        self.new_cells[should_live] = 1
+        self.new_cells[should_die] = 0
 
     def update_cells(self):
         self.cells = self.new_cells.copy()
-
-        for row in range(self.cells.shape[0]):
-            for col in range(self.cells.shape[1]):
-                self.update_cell_status(row, col)
+        self.update_cell_status()
 
     # @timer
     def refresh(self):

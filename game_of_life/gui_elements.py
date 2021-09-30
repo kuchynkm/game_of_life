@@ -9,9 +9,9 @@ class MenuBar(tk.Menu):
 
         self.file_menu = tk.Menu(self, tearoff=0)
         self.add_cascade(label="File", menu=self.file_menu)
-        self.file_menu.add_command(label="Restart", command=None)
+        self.file_menu.add_command(label="Restart (R)", command=None)
         self.file_menu.add_separator()
-        self.file_menu.add_command(label="Exit", command=None)
+        self.file_menu.add_command(label="Quit (Q)", command=None)
 
         self.settings_menu = tk.Menu(self, tearoff=0)
         self.add_cascade(label="Settings", menu=self.settings_menu)
@@ -108,22 +108,33 @@ class Grid(tk.Canvas):
         self.edge_color = edge_color
         self.num_units = num_units
         self.unit_size = size / num_units
+        self.cells = self.create_image(0, 0, anchor=tk.NW, image=None, tag="cells")
 
     def show_grid(self):
-        self.delete("all")
 
         for row in range(self.num_units):
-            for col in range(self.num_units):
-                self.draw_unit(row, col, color=self.background)
+            self.draw_h_line(row)
+            self.draw_v_line(row)
 
-    def draw_unit(self, row, col, color):
+    def draw_h_line(self, row):
 
-        x1 = col * self.unit_size
+        x1, x2 = 0, self.winfo_width()
         y1 = row * self.unit_size
-        x2 = x1 + self.unit_size
-        y2 = y1 + self.unit_size
+        y2 = y1
 
-        self.create_rectangle(x1, y1, x2, y2, fill=color, outline=self.edge_color)
+        self.create_line(x1, y1, x2, y2, fill=self.edge_color, tag="grid")
+        # self.create_line(x1, y1, x2, y2, fill=self.edge_color, tag=f"h_line_{row}")
+
+
+    def draw_v_line(self, col):
+
+        y1, y2 = 0, self.winfo_height()
+        x1 = col * self.unit_size
+        x2 = x1
+
+        self.create_line(x1, y1, x2, y2, fill=self.edge_color, tag=f"grid")
+        # self.create_line(x1, y1, x2, y2, fill=self.edge_color, tag=f"v_line_{col}")
+
 
 
 
