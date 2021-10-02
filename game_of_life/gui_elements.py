@@ -1,6 +1,8 @@
 """Tkinter GUI elements module."""
 import tkinter as tk
 from tkinter import ttk
+import numpy as np
+from PIL import ImageTk, Image
 
 
 class MenuBar(tk.Menu):
@@ -108,32 +110,28 @@ class Grid(tk.Canvas):
         self.edge_color = edge_color
         self.num_units = num_units
         self.unit_size = size / num_units
+        self.size = size + 1
         self.cells = self.create_image(0, 0, anchor=tk.NW, image=None, tag="cells")
+        self.cell_img = None
 
     def show_grid(self):
+        self.delete('grid')
+        for unit in range(self.num_units):
+            pos = unit * self.unit_size
+            self.create_line(0, pos, self.size, pos, fill=self.edge_color, tag="grid")
+            self.create_line(pos, 0, pos, self.size, fill=self.edge_color, tag="grid")
 
-        for row in range(self.num_units):
-            self.draw_h_line(row)
-            self.draw_v_line(row)
+    def show_cells(self, cell_array):
+        image = Image.fromarray(255 * (1 - cell_array.astype(np.uint8)))
+        image = image.resize(size=(self.size, self.size), resample=Image.NEAREST)
+        self.cell_img = ImageTk.PhotoImage(image)
+        self.itemconfig("cells", image=self.cell_img)
+        self.tag_lower("cells")
 
-    def draw_h_line(self, row):
-
-        x1, x2 = 0, self.winfo_width()
-        y1 = row * self.unit_size
-        y2 = y1
-
-        self.create_line(x1, y1, x2, y2, fill=self.edge_color, tag="grid")
-        # self.create_line(x1, y1, x2, y2, fill=self.edge_color, tag=f"h_line_{row}")
-
-
-    def draw_v_line(self, col):
-
-        y1, y2 = 0, self.winfo_height()
-        x1 = col * self.unit_size
-        x2 = x1
-
-        self.create_line(x1, y1, x2, y2, fill=self.edge_color, tag=f"grid")
-        # self.create_line(x1, y1, x2, y2, fill=self.edge_color, tag=f"v_line_{col}")
+    def coords_to_grid_position(self, x, y):
+        i = int(y // self.unit_size)
+        j = int(x // self.unit_size)
+        return i, j
 
 
 
