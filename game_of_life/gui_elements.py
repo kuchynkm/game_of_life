@@ -38,71 +38,6 @@ class MenuBar(tk.Menu):
         pass
 
 
-class Slider(ttk.Scale):
-    """Custom slider with integer resolution."""
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, command=self._value_changed, **kwargs)
-
-    def _value_changed(self, new_value):
-        new_value = int(float(new_value))
-        self.winfo_toplevel().globalsetvar(self.cget('variable'), new_value)
-
-
-class RgbFrame(tk.Frame):
-    def __init__(self, master):
-        super().__init__(master)
-
-        colors = ("Red", "Green", "Blue")
-        self.rgb_values = {c: tk.IntVar() for c in colors}
-        self.rgb_labels = {c: ttk.Label(self, textvariable=self.rgb_values[c]) for c in colors}
-        self.rgb_sliders = {
-            c: Slider(
-                self,
-                from_=0, to=255,
-                orient=tk.HORIZONTAL,
-                length=255,
-                variable=self.rgb_values[c]
-            ) for c in colors}
-
-        for row, c in zip(range(1, 4), colors):
-            ttk.Label(self, text=c).grid(row=row, column=0, sticky=tk.E, padx=10)
-            self.rgb_sliders[c].grid(row=row, column=1, sticky=tk.W)
-            self.rgb_labels[c].grid(row=row, column=2, sticky=tk.E, padx=10)
-            self.rgb_labels[c].grid(row=row, column=2, sticky=tk.E, padx=10)
-
-
-class EntryFrame(tk.Frame):
-    def __init__(self, master):
-        super().__init__(master)
-
-        # Julia set constant
-        self.re_c = tk.DoubleVar()
-        ttk.Label(self, text="Constant C").grid(row=0, column=0, sticky=tk.W, padx=10)
-        self.re_c_entry = ttk.Entry(self, width=12, textvariable=self.re_c)
-        self.re_c_entry.grid(row=0, column=1)
-
-        self.im_c = tk.DoubleVar()
-        ttk.Label(self, text=" + i ").grid(row=0, column=2)
-        self.im_c_entry = ttk.Entry(self, width=12, textvariable=self.im_c)
-        self.im_c_entry.grid(row=0, column=3)
-
-        # origin
-        self.re_origin = tk.DoubleVar()
-        self.im_origin = tk.DoubleVar()
-        ttk.Label(self, text="Origin").grid(row=1, column=0, sticky=tk.E, padx=10)
-        self.re_origin_entry = ttk.Entry(self, width=12, textvariable=self.re_origin)
-        self.re_origin_entry.grid(row=1, column=1)
-        ttk.Label(self, text=" + i ").grid(row=1, column=2)
-        self.im_origin_entry = ttk.Entry(self, width=12, textvariable=self.im_origin)
-        self.im_origin_entry.grid(row=1, column=3)
-
-        # zoom
-        self.zoom = tk.DoubleVar()
-        ttk.Label(self, text="Zoom").grid(row=2, column=0, sticky=tk.E, padx=10)
-        self.zoom_entry = ttk.Entry(self, width=6, textvariable=self.zoom)
-        self.zoom_entry.grid(row=2, column=1, columnspan=3, sticky=tk.W)
-
-
 class Grid(tk.Canvas):
     def __init__(self, master, size, num_units, background, edge_color, *args, **kwargs):
         super(Grid, self).__init__(master, width=size + 1, height=size + 1, *args, **kwargs)
@@ -110,22 +45,26 @@ class Grid(tk.Canvas):
         self.edge_color = edge_color
         self.num_units = num_units
         self.unit_size = size / num_units
-        self.size = size + 1
+        self.size = size
         self.cells = self.create_image(0, 0, anchor=tk.NW, image=None, tag="cells")
         self.cell_img = None
 
-    def show_grid(self):
+    def draw_grid(self):
         self.delete('grid')
         for unit in range(self.num_units):
             pos = unit * self.unit_size
             self.create_line(0, pos, self.size, pos, fill=self.edge_color, tag="grid")
             self.create_line(pos, 0, pos, self.size, fill=self.edge_color, tag="grid")
 
-    def show_cells(self, cell_array):
+    def draw_array(self, cell_array):
         image = Image.fromarray(255 * (1 - cell_array.astype(np.uint8)))
         image = image.resize(size=(self.size, self.size), resample=Image.NEAREST)
         self.cell_img = ImageTk.PhotoImage(image)
         self.itemconfig("cells", image=self.cell_img)
+        self.tag_lower("cells")
+
+    def draw_img(self, cell_img):
+        self.itemconfig("cells", image=cell_img)
         self.tag_lower("cells")
 
     def coords_to_grid_position(self, x, y):
