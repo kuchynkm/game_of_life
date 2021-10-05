@@ -68,11 +68,27 @@ class GUI:
 
 class GameOfLife:
 
+    PAUSE_MSG = "PAUSE"
+    INIT_MSG = "INIT"
+    RANDOM_INIT_MSG = "RANDOM_INIT"
+    CLEAR_QUEUES_MSG = "CLEAR_QUEUES"
+    CURRENT_GENERATION_MSG = "CURRENT_GENERATION"
+
+
     def __init__(self, master):
         """
         Start the GUI and a worker thread for calculations of cell's next generations.
-        We are in the main (original) thread of the application, which will later be used by
-        the GUI as well. We spawn a new thread for the worker.
+        App GUI is running in the main thread while heavy lifting is done in the worker thread.
+        There are two queues:
+
+            * to_process queue with cell arrays to be processed (calculation of new generation
+            from the current one and conversion to image);
+
+            * processed queue containing images to be displayed by GUI;
+
+        Worker thread is responsible for reading and writing to to_process queue and writing to processed queue.
+        Main thread is only allowed to read from processed queue and writin to to_process queue (in order to
+        communicate with worker thread.
         """
         self.master = master
         self.master.bind("<KeyPress>", self.keypress_handler)
@@ -87,13 +103,9 @@ class GameOfLife:
 
         # worker thread
         self.worker_thread = threading.Thread(target=self.cell_processing, daemon=True)
-        self.worker_running = False
+        self.worker_running = True
         self.gui_paused = True
-        self.processing_paused = False
         self.idle_period = 5
-
-        # initialize game
-        self.init_game()
 
         # GUI setup
         self.gui = GUI(master)
@@ -104,9 +116,12 @@ class GameOfLife:
         self.gui.widgets["grid"].bind("<Button-3>", lambda x: self.edit_cell(x, alive=False))
         self.gui.widgets["grid"].bind("<B3-Motion>", lambda x: self.edit_cell(x, alive=False))
         self.gui.widgets["grid"].bind("<Button-2>", lambda x: self.pause_game())
+        self.gui.widgets["grid"].bind("<ButtonRelease-1>", lambda x: self.current_generation_to_queue())
         self.dt = 50
 
-        # start a periodic call in GUI to check if the queue contains anything
+        # initialize game
+        self.to_process.put(self.RANDOM_INIT_MSG)
+        self.worker_thread.start()
         self.master.after(100, self.periodic_gui_update)
 
     def keypress_handler(self, event):
@@ -128,27 +143,23 @@ class GameOfLife:
     def init_game(self, random=True):
         self.gui_paused = True
 
-        self.clear_queues()
-
         if random:
             self.to_process.put(np.random.randint(2, size=(NUM_UNITS, NUM_UNITS)))
         else:
             self.to_process.put(np.zeros(shape=(NUM_UNITS, NUM_UNITS)))
 
-        if not self.worker_running:
-            self.worker_running = True
-            self.worker_thread.start()
+        # if not self.worker_running:
+        #     self.worker_running = True
+        #     self.worker_thread.start()
 
         self.gui_paused = False
 
     def pause_game(self):
         if self.gui_paused:
             self.gui_paused = False
-            self.processing_paused = False
             logger.debug("<UNPAUSED>")
         else:
             self.gui_paused = True
-            self.processing_paused = True
             logger.debug("<PAUSED>")
 
     def quit_game(self):
@@ -157,34 +168,40 @@ class GameOfLife:
         logger.debug("<QUIT>")
 
     def restart_game(self):
-        self.init_game()
-        self.processing_paused = False
+        self.clear_queue(self.processed)
+        self.to_process.put(self.RANDOM_INIT_MSG)
         logger.debug("<RESTART>")
 
     def erase_cells(self):
-        self.init_game(random=False)
-        self.processing_paused = False
+        self.clear_queue(self.processed)
+        self.to_process.put(self.INIT_MSG)
         logger.debug("<CELLS ERASED>")
 
     def next_step(self):
         self.gui_paused = True
-        self.processing_paused = False
         self.gui_update_step()
 
-    def clear_queues(self):
-        def clear_queue(q):
-            with q.mutex:
-                q.queue.clear()
-                q.all_tasks_done.notify_all()
-                q.unfinished_tasks = 0
+    @staticmethod
+    def clear_queue(q):
+        logger.debug(f"Clearing a queue from thread {threading.get_ident()} ...")
+        with q.mutex:
+            q.queue.clear()
+            q.all_tasks_done.notify_all()
+            q.unfinished_tasks = 0
+        logger.debug("Queue clear")
 
-        clear_queue(self.to_process)
-        clear_queue(self.processed)
+    def clear_queues(self):
+        logger.debug("Clear queues called")
+
+        self.clear_queue(self.to_process)
+        self.clear_queue(self.processed)
+        logger.debug("Queues clear...")
 
     def edit_cell(self, event, alive):
+        # TODO still freezing
         self.gui_paused = True
-        self.processing_paused = True
-        self.clear_queues()
+        self.to_process.put(self.PAUSE_MSG)
+        self.clear_queue(self.processed)
 
         i, j = self.gui.widgets["grid"].coords_to_grid_position(x=event.x, y=event.y)
         if i >= 0 and j >= 0:
@@ -193,10 +210,14 @@ class GameOfLife:
             except IndexError:
                 pass
 
-        self.to_process.put(self.current_generation)
-        self.processing_step()
         cells = self.array_to_img(self.current_generation)
         self.gui.show_cells(cells)
+        print("len of processed:", self.processed.qsize())
+
+    def current_generation_to_queue(self):
+        self.to_process.put(self.CURRENT_GENERATION_MSG)
+        self.clear_queue(self.processed)
+        self.gui_paused = False
 
     def periodic_gui_update(self):
         # logger.debug("Periodic gui update called")
@@ -210,7 +231,7 @@ class GameOfLife:
 
         while self.worker_running:
 
-            if not self.processing_paused and not self.processed.full():
+            if not self.to_process.empty():
                 self.processing_step()
 
             time.sleep(1e-3 * self.idle_period)
@@ -218,13 +239,36 @@ class GameOfLife:
     def processing_step(self):
         # logger.debug("Processing step called")
 
-        if not self.to_process.empty():
-            to_process = self.to_process.get(False)
-        else:
-            return
+        to_process = self.to_process.get(False)
+
+        # TODO make this a message handler or something..
+        if isinstance(to_process, str):
+            if to_process == self.INIT_MSG:
+                logger.debug("Received INIT MSG")
+                # clear queue can be moved to init game since it's called only by worker
+                self.clear_queue(self.to_process)
+                self.init_game(random=False)
+                return
+            elif to_process == self.RANDOM_INIT_MSG:
+                logger.debug("Received RANDOM INIT MSG")
+                self.clear_queue(self.to_process)
+                self.init_game(random=True)
+                return
+            elif to_process == self.CLEAR_QUEUES_MSG:
+                logger.debug("Received CLEAR QUEUE MSG")
+                self.clear_queue(self.to_process)
+                return
+            elif to_process == self.CURRENT_GENERATION_MSG:
+                logger.debug("Received CURRENT GENERATION MSG")
+                self.clear_queue(self.to_process)
+                self.to_process.put(self.current_generation)
+                print("len of to_process:", self.to_process.qsize())
+                return
+            elif to_process == self.PAUSE_MSG or self.processed.full():
+                logger.debug("Either pause or processed queue is full.")
+                return
 
         processed = to_process.copy()
-
         neighbors = convolve2d(to_process, self.kernel, mode='same')
 
         should_die = (to_process == 1) & ((neighbors > 3) | (neighbors < 2))
