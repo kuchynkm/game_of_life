@@ -1,4 +1,5 @@
 import tkinter as Tkinter
+import sys
 from loguru import logger
 from PIL import ImageTk, Image
 from scipy.signal import convolve2d
@@ -8,6 +9,11 @@ from queue import Queue
 import numpy as np
 
 from game_of_life.gui_elements import MenuBar, Grid
+
+
+# logger level
+logger.remove()
+logger.add(sys.stderr, level="INFO")
 
 
 # TODO move to config
@@ -74,7 +80,6 @@ class GameOfLife:
     CLEAR_QUEUES_MSG = "CLEAR_QUEUES"
     CURRENT_GENERATION_MSG = "CURRENT_GENERATION"
 
-
     def __init__(self, master):
         """
         Start the GUI and a worker thread for calculations of cell's next generations.
@@ -93,18 +98,20 @@ class GameOfLife:
         self.master = master
         self.master.bind("<KeyPress>", self.keypress_handler)
 
-        # queues for cell generations
-        self.to_process = Queue()
-        self.processed = Queue(maxsize=100)
+        # threading queues
+        self.msg_queue = Queue()
+        self.processed = Queue(maxsize=50)
 
         # cell processing
         self.kernel = np.array([[1, 1, 1], [1, 0, 1], [1, 1, 1]])
-        self.current_generation = None
+        self.shown = None
+        self.to_process = None
 
         # worker thread
-        self.worker_thread = threading.Thread(target=self.cell_processing, daemon=True)
+        self.worker_thread = threading.Thread(target=self.worker_tasks, daemon=True)
         self.worker_running = True
         self.gui_paused = True
+        self.processing_paused = False
         self.idle_period = 5
 
         # GUI setup
@@ -120,7 +127,7 @@ class GameOfLife:
         self.dt = 50
 
         # initialize game
-        self.to_process.put(self.RANDOM_INIT_MSG)
+        self.msg_queue.put(self.RANDOM_INIT_MSG)
         self.worker_thread.start()
         self.master.after(100, self.periodic_gui_update)
 
@@ -144,13 +151,9 @@ class GameOfLife:
         self.gui_paused = True
 
         if random:
-            self.to_process.put(np.random.randint(2, size=(NUM_UNITS, NUM_UNITS)))
+            self.to_process = np.random.randint(2, size=(NUM_UNITS, NUM_UNITS))
         else:
-            self.to_process.put(np.zeros(shape=(NUM_UNITS, NUM_UNITS)))
-
-        # if not self.worker_running:
-        #     self.worker_running = True
-        #     self.worker_thread.start()
+            self.to_process = np.zeros(shape=(NUM_UNITS, NUM_UNITS))
 
         self.gui_paused = False
 
@@ -168,13 +171,13 @@ class GameOfLife:
         logger.debug("<QUIT>")
 
     def restart_game(self):
+        self.msg_queue.put(self.RANDOM_INIT_MSG, block=False)
         self.clear_queue(self.processed)
-        self.to_process.put(self.RANDOM_INIT_MSG)
         logger.debug("<RESTART>")
 
     def erase_cells(self):
+        self.msg_queue.put(self.INIT_MSG, block=False)
         self.clear_queue(self.processed)
-        self.to_process.put(self.INIT_MSG)
         logger.debug("<CELLS ERASED>")
 
     def next_step(self):
@@ -183,115 +186,115 @@ class GameOfLife:
 
     @staticmethod
     def clear_queue(q):
-        logger.debug(f"Clearing a queue from thread {threading.get_ident()} ...")
+        logger.debug(f"Clearing queue {q} from thread {threading.get_ident()} ...")
         with q.mutex:
             q.queue.clear()
             q.all_tasks_done.notify_all()
             q.unfinished_tasks = 0
         logger.debug("Queue clear")
 
-    def clear_queues(self):
-        logger.debug("Clear queues called")
-
-        self.clear_queue(self.to_process)
-        self.clear_queue(self.processed)
-        logger.debug("Queues clear...")
-
     def edit_cell(self, event, alive):
-        # TODO still freezing
         self.gui_paused = True
-        self.to_process.put(self.PAUSE_MSG)
-        self.clear_queue(self.processed)
+        cell_array = self.shown
 
         i, j = self.gui.widgets["grid"].coords_to_grid_position(x=event.x, y=event.y)
         if i >= 0 and j >= 0:
             try:
-                self.current_generation[i, j] = int(alive)
+                cell_array[i, j] = int(alive)
             except IndexError:
                 pass
 
-        cells = self.array_to_img(self.current_generation)
+        self.shown = cell_array
+        cells = self.array_to_img(cell_array)
         self.gui.show_cells(cells)
-        print("len of processed:", self.processed.qsize())
 
     def current_generation_to_queue(self):
-        self.to_process.put(self.CURRENT_GENERATION_MSG)
         self.clear_queue(self.processed)
-        self.gui_paused = False
+        logger.debug(f"Processed imgs in queue: {self.processed.qsize()}")
+        self.msg_queue.put(self.CURRENT_GENERATION_MSG)
+        logger.debug("Inserted current gen msg in msg queue")
 
     def periodic_gui_update(self):
-        # logger.debug("Periodic gui update called")
         if not self.gui_paused:
             self.gui_update_step()
 
         self.master.after(self.dt, self.periodic_gui_update)
+        # self.master.after(500, self.periodic_gui_update)
 
-    def cell_processing(self):
-        logger.debug("Started cell processing ...")
+    def worker_tasks(self):
 
         while self.worker_running:
+            logger.info("loop of worker ...")
 
-            if not self.to_process.empty():
-                self.processing_step()
+            if not self.msg_queue.empty():
+                logger.debug("calling msg handler")
+                self.msg_handler()
+            else:
+                logger.debug("to_process empty")
+                self.process_array()
+                logger.debug(f"to process, processed: {self.msg_queue.qsize()}, {self.processed.qsize()}")
 
             time.sleep(1e-3 * self.idle_period)
+            # time.sleep(0.3)
 
-    def processing_step(self):
-        # logger.debug("Processing step called")
+    def msg_handler(self):
+        msg = self.msg_queue.get(False)
 
-        to_process = self.to_process.get(False)
+        if msg == self.INIT_MSG:
+            logger.debug("Received INIT MSG")
+            self.init_game(random=False)
+            return
+        elif msg == self.RANDOM_INIT_MSG:
+            logger.debug("Received RANDOM INIT MSG")
+            self.init_game(random=True)
+            return
+        elif msg == self.CURRENT_GENERATION_MSG:
+            logger.debug("Received CURRENT GENERATION MSG")
+            logger.debug(f"len of processed and msg queue: {self.processed.qsize(), self.msg_queue.qsize()}")
+            self.to_process = self.shown
+            logger.debug("Array to process updated")
+            return
+        elif msg == self.PAUSE_MSG:
+            logger.debug("Received PAUSE MSG.")
+            self.processing_paused = True
+            return
 
-        # TODO make this a message handler or something..
-        if isinstance(to_process, str):
-            if to_process == self.INIT_MSG:
-                logger.debug("Received INIT MSG")
-                # clear queue can be moved to init game since it's called only by worker
-                self.clear_queue(self.to_process)
-                self.init_game(random=False)
-                return
-            elif to_process == self.RANDOM_INIT_MSG:
-                logger.debug("Received RANDOM INIT MSG")
-                self.clear_queue(self.to_process)
-                self.init_game(random=True)
-                return
-            elif to_process == self.CLEAR_QUEUES_MSG:
-                logger.debug("Received CLEAR QUEUE MSG")
-                self.clear_queue(self.to_process)
-                return
-            elif to_process == self.CURRENT_GENERATION_MSG:
-                logger.debug("Received CURRENT GENERATION MSG")
-                self.clear_queue(self.to_process)
-                self.to_process.put(self.current_generation)
-                print("len of to_process:", self.to_process.qsize())
-                return
-            elif to_process == self.PAUSE_MSG or self.processed.full():
-                logger.debug("Either pause or processed queue is full.")
-                return
+    def process_array(self):
+        if not self.processed.full() and not self.processing_paused:
+            logger.debug("Starting processing ...")
 
-        processed = to_process.copy()
-        neighbors = convolve2d(to_process, self.kernel, mode='same')
+            to_process = self.to_process
+            processed = to_process.copy()
+            neighbors = convolve2d(to_process, self.kernel, mode='same')
+            logger.debug("convolved")
 
-        should_die = (to_process == 1) & ((neighbors > 3) | (neighbors < 2))
-        should_live = (to_process == 0) & (neighbors == 3)
+            should_die = (to_process == 1) & ((neighbors > 3) | (neighbors < 2))
+            should_live = (to_process == 0) & (neighbors == 3)
 
-        processed[should_live] = 1
-        processed[should_die] = 0
+            processed[should_live] = 1
+            processed[should_die] = 0
+            logger.debug("rules applied")
 
-        cell_img = self.array_to_img(processed)
+            cell_img = self.array_to_img(processed)
+            logger.debug("array to img done")
 
-        self.processed.put((processed, cell_img))
-        self.to_process.put(processed)
-
-        logger.debug(f"to process, processed: {self.to_process.qsize()}, {self.processed.qsize()}")
+            self.processed.put((processed, cell_img), block=False)
+            self.to_process = processed
 
     def gui_update_step(self):
         if not self.processed.empty():
-            self.current_generation, cell_img = self.processed.get(False)
+            logger.debug("processed not empty, showing img...")
+            self.shown, cell_img = self.processed.get(block=False)
+            self.processed.task_done()
             self.gui.show_cells(cell_img)
             logger.debug(f"{self.processed.qsize()} processed imgs left in queue")
+        else:
+            logger.debug(f"processed empty: {self.processed.qsize()}")
+            # logger.debug(f"worker is running: {self.worker_running}")
+            # logger.debug(f"worker thread alive {self.worker_thread.is_alive()}")
 
     def array_to_img(self, array):
-        # logger.debug("array to img called")
         image = Image.fromarray(255 * (array.astype(np.uint8)))
-        image = image.resize(size=(GRID_SIZE, GRID_SIZE), resample=Image.NEAREST)
-        return ImageTk.PhotoImage(image)
+        resized_image = image.resize(size=(GRID_SIZE, GRID_SIZE), resample=Image.NEAREST)
+        # image = ImageTk.PhotoImage(image)
+        return ImageTk.PhotoImage(resized_image)
