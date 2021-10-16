@@ -4,7 +4,6 @@ from tkinter import ttk
 import numpy as np
 from PIL import ImageTk, Image
 
-
 class MenuBar(tk.Menu):
     def __init__(self, master):
         super().__init__(master)
@@ -39,13 +38,22 @@ class MenuBar(tk.Menu):
 
 
 class Grid(tk.Canvas):
-    def __init__(self, master, size, num_units, background, edge_color, *args, **kwargs):
+    def __init__(self, master, size, num_units, background_color, foreground_color, edge_color, *args, **kwargs):
         super(Grid, self).__init__(master, width=size + 1, height=size + 1, *args, **kwargs)
-        self.background = background
         self.edge_color = edge_color
         self.num_units = num_units
         self.unit_size = size / num_units
         self.size = size
+        self.background = np.dstack([
+            np.ones((self.num_units, self.num_units)),
+            np.ones((self.num_units, self.num_units)),
+            np.ones((self.num_units, self.num_units))
+        ]) * background_color
+        self.foreground = np.dstack([
+            np.ones((self.num_units, self.num_units)),
+            np.ones((self.num_units, self.num_units)),
+            np.ones((self.num_units, self.num_units))
+        ]) * foreground_color
         self.cells = self.create_image(0, 0, anchor=tk.NW, image=None, tag="cells")
         self.cell_img = None
 

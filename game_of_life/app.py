@@ -1,28 +1,12 @@
-import tkinter as Tkinter
-import sys
-from loguru import logger
-from PIL import ImageTk, Image
-from scipy.signal import convolve2d
 import time
 import threading
 from queue import Queue
+from PIL import ImageTk, Image, ImageColor
+from scipy.signal import convolve2d
 import numpy as np
 
+from game_of_life import config, logger
 from game_of_life.gui_elements import MenuBar, Grid
-
-
-# logger level
-logger.remove()
-logger.add(sys.stderr, level="INFO")
-
-
-# TODO move to config
-GRID_SIZE = 1000
-NUM_UNITS = 60
-SLEEP_TIME = 50
-BACKGROUND = "#ff00ff"
-EDGE_COLOR = "grey"
-CELL_COLOR = "#34aeeb"
 
 
 class GUI:
@@ -48,10 +32,11 @@ class GUI:
         # grid canvas
         widgets["grid"] = Grid(
             master=self.master,
-            size=GRID_SIZE,
-            num_units=NUM_UNITS,
-            background="black",
-            edge_color=EDGE_COLOR,
+            size=config.getint("GRID", "SIZE"),
+            num_units=config.getint("GRID", "UNITS"),
+            background_color=ImageColor.getrgb(config["GRID"]["BACKGROUND"]),
+            foreground_color=ImageColor.getrgb(config["GRID"]["FOREGROUND"]),
+            edge_color=config.get("GRID", "EDGE_COLOR"),
             highlightthickness=0
         )
         widgets["grid"].draw_grid()
@@ -98,22 +83,6 @@ class GameOfLife:
         self.master = master
         self.master.bind("<KeyPress>", self.keypress_handler)
 
-        # threading queues
-        self.msg_queue = Queue()
-        self.processed = Queue(maxsize=50)
-
-        # cell processing
-        self.kernel = np.array([[1, 1, 1], [1, 0, 1], [1, 1, 1]])
-        self.shown = None
-        self.to_process = None
-
-        # worker thread
-        self.worker_thread = threading.Thread(target=self.worker_tasks, daemon=True)
-        self.worker_running = True
-        self.gui_paused = True
-        self.processing_paused = False
-        self.idle_period = 5
-
         # GUI setup
         self.gui = GUI(master)
         self.gui.widgets["menubar"].file_menu.entryconfigure(0, command=self.restart_game)
@@ -124,7 +93,25 @@ class GameOfLife:
         self.gui.widgets["grid"].bind("<B3-Motion>", lambda x: self.edit_cell(x, alive=False))
         self.gui.widgets["grid"].bind("<Button-2>", lambda x: self.pause_game())
         self.gui.widgets["grid"].bind("<ButtonRelease-1>", lambda x: self.current_generation_to_queue())
-        self.dt = 50
+        self.gui_sleep = config.getint("APP", "GUI_SLEEP")
+        self.num_units = self.gui.widgets["grid"].num_units
+        self.grid_size = self.gui.widgets["grid"].size
+
+        # cell processing
+        self.kernel = np.array([[1, 1, 1], [1, 0, 1], [1, 1, 1]])
+        self.shown = None
+        self.to_process = None
+
+        # threading queues
+        self.msg_queue = Queue()
+        self.processed = Queue(maxsize=50)
+
+        # worker thread
+        self.worker_thread = threading.Thread(target=self.worker_tasks, daemon=True)
+        self.worker_running = True
+        self.gui_paused = True
+        self.processing_paused = False
+        self.worker_sleep = config.getint("APP", "WORKER_SLEEP")
 
         # initialize game
         self.msg_queue.put(self.RANDOM_INIT_MSG)
@@ -134,26 +121,24 @@ class GameOfLife:
     def keypress_handler(self, event):
         char = event.keysym.lower()
         logger.debug(f"{char} pressed ...")
-        if char == 'p' or char == 'space':
-            self.pause_game()
-        elif char == 'r':
-            self.restart_game()
-        elif char == 'e':
-            self.erase_cells()
-        elif char == 'q' or char == 'escape':
-            self.quit_game()
-        elif char == 'n':
-            self.next_step()
-        else:
-            logger.debug("<NO ACTION>")
+
+        actions = {
+            config["APP"]["PAUSE_GAME_KEY"]: self.pause_game,
+            config["APP"]["RESTART_GAME_KEY"]: self.restart_game,
+            config["APP"]["QUIT_GAME_KEY"]: self.quit_game,
+            config["APP"]["NEXT_STEP_KEY"]: self.next_step,
+            config["APP"]["ERASE_CELLS_KEY"]: self.erase_cells,
+        }
+
+        actions.get(char, lambda *args: None).__call__()
 
     def init_game(self, random=True):
         self.gui_paused = True
 
         if random:
-            self.to_process = np.random.randint(2, size=(NUM_UNITS, NUM_UNITS))
+            self.to_process = np.random.randint(2, size=(self.num_units, self.num_units))
         else:
-            self.to_process = np.zeros(shape=(NUM_UNITS, NUM_UNITS))
+            self.to_process = np.zeros(shape=(self.num_units, self.num_units))
 
         self.gui_paused = False
 
@@ -198,11 +183,12 @@ class GameOfLife:
         cell_array = self.shown
 
         i, j = self.gui.widgets["grid"].coords_to_grid_position(x=event.x, y=event.y)
-        if i >= 0 and j >= 0:
-            try:
-                cell_array[i, j] = int(alive)
-            except IndexError:
-                pass
+        i, j = max(i, 0), max(j, 0)
+
+        try:
+            cell_array[i, j] = int(alive)
+        except IndexError:
+            pass
 
         self.shown = cell_array
         cells = self.array_to_img(cell_array)
@@ -218,8 +204,7 @@ class GameOfLife:
         if not self.gui_paused:
             self.gui_update_step()
 
-        self.master.after(self.dt, self.periodic_gui_update)
-        # self.master.after(500, self.periodic_gui_update)
+        self.master.after(self.gui_sleep, self.periodic_gui_update)
 
     def worker_tasks(self):
 
@@ -234,8 +219,7 @@ class GameOfLife:
                 self.process_array()
                 logger.debug(f"to process, processed: {self.msg_queue.qsize()}, {self.processed.qsize()}")
 
-            time.sleep(1e-3 * self.idle_period)
-            # time.sleep(0.3)
+            time.sleep(1e-3 * self.worker_sleep)
 
     def msg_handler(self):
         msg = self.msg_queue.get(False)
@@ -263,21 +247,23 @@ class GameOfLife:
         if not self.processed.full() and not self.processing_paused:
             logger.debug("Starting processing ...")
 
+            # get image to process
             to_process = self.to_process
             processed = to_process.copy()
+
+            # calcualte number of cell neighbours
             neighbors = convolve2d(to_process, self.kernel, mode='same')
             logger.debug("convolved")
 
+            # apply rules of life
             should_die = (to_process == 1) & ((neighbors > 3) | (neighbors < 2))
             should_live = (to_process == 0) & (neighbors == 3)
-
             processed[should_live] = 1
             processed[should_die] = 0
             logger.debug("rules applied")
 
+            # convert array to image and put in processed queue
             cell_img = self.array_to_img(processed)
-            logger.debug("array to img done")
-
             self.processed.put((processed, cell_img), block=False)
             self.to_process = processed
 
@@ -290,11 +276,14 @@ class GameOfLife:
             logger.debug(f"{self.processed.qsize()} processed imgs left in queue")
         else:
             logger.debug(f"processed empty: {self.processed.qsize()}")
-            # logger.debug(f"worker is running: {self.worker_running}")
-            # logger.debug(f"worker thread alive {self.worker_thread.is_alive()}")
 
     def array_to_img(self, array):
-        image = Image.fromarray(255 * (array.astype(np.uint8)))
-        resized_image = image.resize(size=(GRID_SIZE, GRID_SIZE), resample=Image.NEAREST)
-        # image = ImageTk.PhotoImage(image)
+        # 2D array to RGB array
+        background = self.gui.widgets["grid"].background * (1 - array[:, :, None])
+        foreground = self.gui.widgets["grid"].foreground * array[:, :, None]
+        array = background + foreground
+
+        # array to image and resize
+        image = Image.fromarray(array.astype(np.uint8))
+        resized_image = image.resize(size=(self.grid_size, self.grid_size), resample=Image.NEAREST)
         return ImageTk.PhotoImage(resized_image)
