@@ -91,8 +91,8 @@ class GameOfLife:
         self.gui.widgets["grid"].bind("<B1-Motion>", lambda x: self.edit_cell(x, alive=True))
         self.gui.widgets["grid"].bind("<Button-3>", lambda x: self.edit_cell(x, alive=False))
         self.gui.widgets["grid"].bind("<B3-Motion>", lambda x: self.edit_cell(x, alive=False))
-        self.gui.widgets["grid"].bind("<Button-2>", lambda x: self.pause_game())
         self.gui.widgets["grid"].bind("<ButtonRelease-1>", lambda x: self.current_generation_to_queue())
+        self.gui.widgets["grid"].bind("<ButtonRelease-3>", lambda x: self.current_generation_to_queue())
         self.gui_sleep = config.getint("APP", "GUI_SLEEP")
         self.num_units = self.gui.widgets["grid"].num_units
         self.grid_size = self.gui.widgets["grid"].size
