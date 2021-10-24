@@ -1,6 +1,7 @@
 """Tkinter GUI elements module."""
 import tkinter as tk
-from tkinter import ttk
+from tkinter import Label, ttk
+from loguru import logger
 import numpy as np
 from PIL import ImageTk, Image, ImageColor
 import time
@@ -9,6 +10,7 @@ from game_of_life import config
 
 
 class MenuBar(tk.Menu):
+    """Menu bar with file, settings and help menu."""
     def __init__(self, master):
         super().__init__(master)
 
@@ -16,11 +18,11 @@ class MenuBar(tk.Menu):
         self.add_cascade(label="File", menu=self.file_menu)
         self.file_menu.add_command(label="Restart (R)", command=None)
         self.file_menu.add_separator()
-        self.file_menu.add_command(label="Quit (Q)", command=None)
+        self.file_menu.add_command(label="Quit (Q)", command=self.exit_command)
 
         self.settings_menu = tk.Menu(self, tearoff=0)
         self.add_cascade(label="Settings", menu=self.settings_menu)
-        self.settings_menu.add_command(label="Game settings", command=None)
+        self.settings_menu.add_command(label="Game settings", command=self.settings_command)
 
         self.help_menu = tk.Menu(self, tearoff=0)
         self.add_cascade(label="Help", menu=self.help_menu)
@@ -29,19 +31,70 @@ class MenuBar(tk.Menu):
         master.config(menu=self)
 
     def exit_command(self):
-        pass
-
-    def restart_command(self):
-        pass
+        """Closes the game."""
+        self.master.destroy()
+        logger.debug("<QUIT>")
 
     def settings_command(self):
-        pass
+        logger.info("Opening settings ...")
+        settings = SettingsWindow(self.master)
+        settings.grab_set()
 
     def about_command(self):
         pass
 
 
+class SettingsWindow(tk.Toplevel):
+    """Settings window."""
+    def __init__(self, master):
+        super().__init__(master)
+        self.title("Settings")
+        self.geometry("400x300+250+250")
+        self.resizable(False, False)
+        label = Label(self, text="Settings")
+
+        self.widgets = self._init_widgets()
+
+    def _init_widgets(self):
+        widgets = dict()
+
+        # Number of units        
+        widgets["units"] = tk.IntVar()
+        widgets["units"].set(60)
+        ttk.Label(self, text="Number of units").grid(row=0, column=0, columnspan=2, sticky=tk.W, padx=20, pady=10)
+        widgets["units_entry"] = ttk.Entry(self, width=6, textvariable= widgets["units"])
+        widgets["units_entry"].grid(row=0, column=3, columnspan=2, sticky=tk.E, padx=10)
+
+        # FPS
+        widgets["fps"] = tk.IntVar()
+        widgets["fps"].set(12)
+        ttk.Label(self, text="FPS").grid(row=1, column=0, sticky=tk.W, padx=20, pady=10)
+        widgets["fps_entry"] = ttk.Entry(self, width=6, textvariable=widgets["fps"])
+        widgets["fps_entry"].grid(row=1, column=3, columnspan=2, sticky=tk.E, padx=10)
+
+        # OK button
+        widgets["ok_button"] = tk.Button(self, text="OK", command=self.ok_command)
+        widgets["ok_button"].grid(row=10, column=2, columnspan=1, sticky=tk.E, padx=10)
+
+        # Cancel button
+        widgets["cancel_button"] = tk.Button(self, text="cancel", command=self.cancel_command)
+        widgets["cancel_button"].grid(row=10, column=5, columnspan=1, sticky=tk.E, padx=10)
+
+
+
+        return widgets
+
+    def ok_command(self):
+        pass
+
+    def cancel_command(self):
+        pass
+
+
+
+
 class Grid(tk.Canvas):
+    """Canvas displaying grid and alive/dead cells."""
     def __init__(self, master, size, num_units, background_color, foreground_color, edge_color, *args, **kwargs):
         super(Grid, self).__init__(master, width=size + 1, height=size + 1, *args, **kwargs)
         self.edge_color = edge_color
@@ -87,6 +140,7 @@ class Grid(tk.Canvas):
 
 
 class GameOfLifeGUI:
+    """GUI for the Game of Life."""
     def __init__(self, master: tk.Tk):
         self.master = master
         self.master.title(f"Game of Life")
@@ -99,6 +153,8 @@ class GameOfLifeGUI:
         self.cells = None
         self.last_time = None
         self.current_time = time.perf_counter()
+
+        logger.info("GUI initialized ...")
 
     def _init_widgets(self):
         widgets = dict()
