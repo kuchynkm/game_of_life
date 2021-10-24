@@ -1,29 +1,25 @@
 import tkinter
 from typing import Any, Dict, List
 
-from queue import Queue
-import numpy as np
-
 from game_of_life import config, logger
 from game_of_life.gui import GameOfLifeGUI
-from game_of_life.processor import Processor
+from game_of_life.processor import Processor, Message
 
 
 class GameOfLife:
 
     def __init__(self, master: tkinter.Tk):
         """
-        Start the GUI and a worker thread for calculations of cell's next generations.
+        Start GUI and Processor (a worker thread) for computation of cell's next generations.
         App GUI is running in the main thread while heavy lifting is done in the worker thread.
-        There are two queues:
+        Processor contains two queues:
 
-            * to_process queue with cell arrays to be processed (calculation of new generation
-            from the current one and conversion to image);
+            * message queue  serving as a communication channel between main thread and worker thread; 
 
             * processed queue containing images to be displayed by GUI;
 
-        Worker thread is responsible for reading and writing to to_process queue and writing to processed queue.
-        Main thread is only allowed to read from processed queue and writing to to_process queue (in order to
+        Processor is responsible for reading the message queue and writing to processed queue.
+        Main thread is only allowed to read from processed queue and adding to the message queue (in order to
         communicate with worker thread.
         """
         self.master = master
@@ -37,19 +33,17 @@ class GameOfLife:
         self.gui.widgets["grid"].bind("<B1-Motion>", lambda x: self.edit_cell(x, alive=True))
         self.gui.widgets["grid"].bind("<Button-3>", lambda x: self.edit_cell(x, alive=False))
         self.gui.widgets["grid"].bind("<B3-Motion>", lambda x: self.edit_cell(x, alive=False))
-        self.gui.widgets["grid"].bind("<ButtonRelease-1>", lambda x: self.current_generation_to_queue())
-        self.gui.widgets["grid"].bind("<ButtonRelease-3>", lambda x: self.current_generation_to_queue())
+        self.gui.widgets["grid"].bind("<ButtonRelease-1>", self.process_shown)
+        self.gui.widgets["grid"].bind("<ButtonRelease-3>", self.process_shown)
         self.gui_sleep = config.getint("APP", "GUI_SLEEP")
-        self.num_units = self.gui.widgets["grid"].num_units
-        self.grid_size = self.gui.widgets["grid"].size
         self.gui_paused = False
 
-        # processing thread
+        # processing 
         self.processor = Processor()
         self.shown = None
 
         # initialize game
-        self.processor.send_message(Processor.RANDOM_INIT_MSG)
+        self.processor.send_message(Message.RANDOM_INIT)
         self.processor.start()
         self.master.after(100, self.periodic_gui_update)
 
@@ -80,13 +74,13 @@ class GameOfLife:
         logger.debug("<QUIT>")
 
     def restart_game(self):
-        self.processor.msg_queue.put(Processor.RANDOM_INIT_MSGe)
+        self.processor.msg_queue.put(Message.RANDOM_INIT)
         self.processor.flush_processed()
         self.gui_paused = False
         logger.debug("<RESTART>")
 
     def erase_cells(self):
-        self.processor.msg_queue.put(Processor.INIT_MSG)
+        self.processor.msg_queue.put(Message.CLEAN_INIT)
         self.processor.flush_processed()
         self.gui_paused = False
         logger.debug("<CELLS ERASED>")
@@ -105,17 +99,16 @@ class GameOfLife:
         try:
             cell_array[i, j] = int(alive)
         except IndexError:
-            # TODO handle
-            pass
+            logger.debug("Cursor outside of canvas.")
 
         self.shown = cell_array
         cells = self.processor.array_to_img(cell_array)
         self.gui.show_cells(cells)
 
-    def current_generation_to_queue(self):
+    def process_shown(self, event):
         self.processor.flush_processed()
         logger.debug(f"Processed imgs in queue: {self.processor.processed.qsize()}")
-        self.processor.msg_queue.put(self.shown)
+        self.processor.send_message(Message(self.shown))
         logger.debug("Inserted current gen msg in msg queue")
 
     def periodic_gui_update(self):
