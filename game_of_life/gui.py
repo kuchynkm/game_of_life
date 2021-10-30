@@ -1,22 +1,23 @@
 """Tkinter GUI elements module."""
 import tkinter as tk
 from tkinter import Label, ttk
+from typing import Callable, Optional
 from loguru import logger
 import numpy as np
 from PIL import ImageTk, Image, ImageColor
 import time
 
-from game_of_life import config 
+from game_of_life import config, config_path, default_config
 
 
 class MenuBar(tk.Menu):
     """Menu bar with file, settings and help menu."""
-    def __init__(self, master):
+    def __init__(self, master: tk.Tk) -> None:
         super().__init__(master)
 
         self.file_menu = tk.Menu(self, tearoff=0)
         self.add_cascade(label="File", menu=self.file_menu)
-        self.file_menu.add_command(label="Restart (R)", command=None)
+        self.file_menu.add_command(label="Restart (R)")
         self.file_menu.add_separator()
         self.file_menu.add_command(label="Quit (Q)", command=self.exit_command)
 
@@ -26,7 +27,7 @@ class MenuBar(tk.Menu):
 
         self.help_menu = tk.Menu(self, tearoff=0)
         self.add_cascade(label="Help", menu=self.help_menu)
-        self.help_menu.add_command(label="About", command=None)
+        self.help_menu.add_command(label="About")
 
         master.config(menu=self)
 
@@ -49,47 +50,131 @@ class SettingsWindow(tk.Toplevel):
     def __init__(self, master):
         super().__init__(master)
         self.title("Settings")
-        self.geometry("400x300+250+250")
         self.resizable(False, False)
-        label = Label(self, text="Settings")
 
-        self.widgets = self._init_widgets()
+        # settings
+        self.settings = self._init_settings()
 
-    def _init_widgets(self):
-        widgets = dict()
-
-        # Number of units        
-        widgets["units"] = tk.IntVar()
-        widgets["units"].set(60)
-        ttk.Label(self, text="Number of units").grid(row=0, column=0, columnspan=2, sticky=tk.W, padx=20, pady=10)
-        widgets["units_entry"] = ttk.Entry(self, width=6, textvariable= widgets["units"])
-        widgets["units_entry"].grid(row=0, column=3, columnspan=2, sticky=tk.E, padx=10)
-
-        # FPS
-        widgets["fps"] = tk.IntVar()
-        widgets["fps"].set(12)
-        ttk.Label(self, text="FPS").grid(row=1, column=0, sticky=tk.W, padx=20, pady=10)
-        widgets["fps_entry"] = ttk.Entry(self, width=6, textvariable=widgets["fps"])
-        widgets["fps_entry"].grid(row=1, column=3, columnspan=2, sticky=tk.E, padx=10)
-
+        # reset button
+        self.reset_button = tk.Button(self, text="Reset", padx=20, command=self.reset_command)
+        self.reset_button.grid(row=2, column=0, sticky=tk.W, padx=20, pady=10)
+        
         # OK button
-        widgets["ok_button"] = tk.Button(self, text="OK", command=self.ok_command)
-        widgets["ok_button"].grid(row=10, column=2, columnspan=1, sticky=tk.E, padx=10)
+        self.ok_button = tk.Button(self, text="OK", padx=20, command=self.ok_command)
+        self.ok_button.grid(row=2, column=1, sticky=tk.E, padx=10, pady=10)
 
         # Cancel button
-        widgets["cancel_button"] = tk.Button(self, text="cancel", command=self.cancel_command)
-        widgets["cancel_button"].grid(row=10, column=5, columnspan=1, sticky=tk.E, padx=10)
+        self.cancel_button = tk.Button(self, text="cancel", padx=10, command=self.cancel_command)
+        self.cancel_button.grid(row=2, column=2,  sticky=tk.E, padx=10, pady=10)
 
+    def _init_settings(self):
+        settings = dict()
 
+        # Game settings
+        game_settings = ttk.LabelFrame(self, text="Game")
+        game_settings.grid(column=0, row=0, padx=20, pady=5, sticky=tk.W)
+        # Number of units   
+        settings["units"] = Option(game_settings, config_item=("GRID", "UNITS"), label="Number of units", validation_fn=int)
+        settings["units"].grid(row=0, column=0, sticky=tk.EW)
+        # FPS
+        settings["fps"] = Option(game_settings, config_item=("APP", "MAX_FPS"), label="Maximum FPS", validation_fn=int)
+        settings["fps"].grid(row=1, column=0, sticky=tk.EW)
 
-        return widgets
+        # Graphics settings
+        graphics = ttk.LabelFrame(self, text="Graphics")
+        graphics.grid(column=0, row=1, padx=20, pady=5, sticky=tk.W)
+        # Alive cell color   
+        settings["alive_cell_color"] = Option(graphics, config_item=("GRID", "FOREGROUND"), label="Alive cell color", validation_fn=ImageColor.getrgb)
+        settings["alive_cell_color"].grid(row=0, column=0, sticky=tk.EW)     
+        # Dead cell color
+        settings["dead_cell_color"] = Option(graphics, config_item=("GRID", "BACKGROUND"), label="Dead cell color", validation_fn=ImageColor.getrgb)
+        settings["dead_cell_color"].grid(row=1, column=0, sticky=tk.EW)  
+        # Grid color
+        settings["grid_color"] = Option(graphics, config_item=("GRID", "EDGE_COLOR"), label="Grid color", validation_fn=ImageColor.getrgb)
+        settings["grid_color"].grid(row=2, column=0, sticky=tk.EW)    
+
+        return settings
 
     def ok_command(self):
-        pass
+        for _, setting in self.settings.items():
+            try:
+                setting.save_to_config()
+            except ValueError as e:
+                error_msg = str(e)
+                MessageWindow(self.master, msg_type="Error", msg=error_msg)
+                return
+
+        self.destroy()
 
     def cancel_command(self):
-        pass
+        self.destroy()
 
+    def reset_command(self):
+        for _, setting in self.settings.items():
+            setting.reset_default()
+
+        # with open(config_path, 'w') as configfile:
+        #     default_config.write(configfile)
+        logger.info("Reset config to default.")
+
+
+class MessageWindow(tk.Toplevel):
+    def __init__(self, master: tk.Misc, msg_type: str, msg: str):
+        super().__init__(master)
+        self.title(msg_type)
+        self.resizable(False, False)
+        self.grab_set()
+
+        self.label = Label(self, text=msg)
+        self.label.grid(row=0, column=0, padx=20, pady=10)
+
+        self.ok_button = tk.Button(self, text="OK", padx=20, command=self.destroy)
+        self.ok_button.grid(row=1, column=0, padx=10, pady=10)
+
+
+
+class Option(tk.Frame):
+    def __init__(self, master, config_item: tuple, label: str, validation_fn: Optional[Callable] = None):
+        super().__init__(master)
+        self.master = master
+        # pairing with an item in the config file
+        self.conf_item = config_item
+        self.validation_fn = validation_fn
+        # label
+        self.label = ttk.Label(self, text=label)
+        self.label.grid(row=0, column=0, sticky=tk.W, padx=20, pady=10)
+        # entry
+        self.entry = ttk.Entry(self, width=8)
+        self.entry.insert('0', config.get(*config_item))
+        self.entry.grid(row=0, column=1, sticky=tk.E, padx=10)
+        self.columnconfigure(1, weight=1)
+
+    def get_value(self):
+        return self.entry.get()
+
+    def set_value(self, value):
+        self._validate_value()
+        self.entry.set(value)
+
+    def save_to_config(self):
+        if self.validation_fn is not None:
+            try:
+                value = self.entry.get()
+                self.validation_fn(value)
+            except ValueError:
+                error_msg = "Value not supported."
+                logger.error(error_msg)
+                raise ValueError(error_msg)
+
+        config.set(*self.conf_item, value=str(value))
+        with open(config_path, 'w') as configfile:
+            config.write(configfile)
+
+        logger.debug(f"Saved {value} to {self.conf_item} option.")
+
+    def reset_default(self):
+        self.entry.delete(0, 'end')
+        self.entry.insert('0', default_config.get(*self.conf_item))
 
 
 
@@ -144,7 +229,8 @@ class GameOfLifeGUI:
     def __init__(self, master: tk.Tk):
         self.master = master
         self.master.title(f"Game of Life")
-        self.master.resizable(0, 0)
+        self.master.iconphoto(True, tk.PhotoImage(file="game_of_life/resources/images/icon.png"))
+        self.master.resizable(False, False)
 
         # initialize widgets
         self.widgets = self._init_widgets()

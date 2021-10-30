@@ -1,4 +1,4 @@
-import tkinter
+import tkinter as tk
 from typing import Any, Dict, List
 
 from game_of_life import config, logger
@@ -8,7 +8,7 @@ from game_of_life.processing import ProcessingThread, Message
 
 class GameOfLife:
 
-    def __init__(self, master: tkinter.Tk):
+    def __init__(self, master: tk.Tk):
         """
         Start GUI and Processor (a worker thread) for computation of cell's next generations.
         App GUI is running in the main thread while heavy lifting is done in the worker thread.
@@ -34,7 +34,7 @@ class GameOfLife:
         self.gui.widgets["grid"].bind("<B3-Motion>", lambda x: self.edit_cell(x, alive=False))
         self.gui.widgets["grid"].bind("<ButtonRelease-1>", self._process_shown)
         self.gui.widgets["grid"].bind("<ButtonRelease-3>", self._process_shown)
-        self.gui_sleep = config.getint("APP", "GUI_SLEEP")
+        self.gui_sleep = int(1000 / config.getint("APP", "MAX_FPS"))
         self.gui_paused = False
 
         # processing 
@@ -47,7 +47,7 @@ class GameOfLife:
         self.master.after(100, self.periodic_gui_update)
         logger.info("Game of Life initialized ...")
 
-    def keypress_handler(self, event):
+    def keypress_handler(self, event: tk.Event) -> None:
         """Handles key-press events."""
         char = event.keysym.lower()
         logger.debug(f"{char} pressed ...")
@@ -62,7 +62,7 @@ class GameOfLife:
 
         actions.get(char, lambda *args: None).__call__()
 
-    def pause_game(self):
+    def pause_game(self) -> None:
         """Pauses the game."""
         if self.gui_paused:
             self.gui_paused = False
@@ -71,26 +71,26 @@ class GameOfLife:
             self.gui_paused = True
             logger.debug("<PAUSED>")
 
-    def restart_game(self):
+    def restart_game(self) -> None:
         """Restarts the game with random initial state."""
         self.processor.msg_queue.put(Message(Message.RANDOM_INIT))
         self.processor.flush_processed()
         self.gui_paused = False
         logger.debug("<RESTART>")
 
-    def erase_cells(self):
+    def erase_cells(self) -> None:
         """Erases all living cells in the game."""
         self.processor.msg_queue.put(Message(Message.CLEAN_INIT))
         self.processor.flush_processed()
         self.gui_paused = False
         logger.debug("<CELLS ERASED>")
 
-    def next_step(self):
+    def next_step(self) -> None:
         """Pauses the game and performs a single next step."""
         self.gui_paused = True
         self.update_gui()
 
-    def edit_cell(self, event, alive):
+    def edit_cell(self, event: tk.Event, alive: bool) -> None:
         """Edits cell status at the given position."""
         self.gui_paused = True
         cell_array = self.shown
