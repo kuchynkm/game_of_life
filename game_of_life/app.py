@@ -1,6 +1,8 @@
 import tkinter as tk
 from typing import Any, Dict, List
 
+import numpy as np
+
 from game_of_life import config, logger
 from game_of_life.gui import GameOfLifeGUI
 from game_of_life.processing import ProcessingThread, Message
@@ -39,7 +41,7 @@ class GameOfLife:
 
         # processing 
         self.processor = ProcessingThread()
-        self.shown = None
+        self.shown: np.ndarray
 
         # initialize game
         self.processor.send_message(Message(Message.RANDOM_INIT))
@@ -107,21 +109,21 @@ class GameOfLife:
         cells = self.processor.array_to_img(cell_array)
         self.gui.show_cells(cells)
 
-    def _process_shown(self, event):
+    def _process_shown(self, event: tk.Event) -> None:
         """Puts currently shown image to the processing thread as a new initial state."""
         self.processor.flush_processed()
         logger.debug(f"Processed imgs in queue: {self.processor.processed.qsize()}")
         self.processor.send_message(Message(Message.IMG_UPDATE, self.shown))
         logger.debug("Inserted current gen msg in msg queue")
 
-    def periodic_gui_update(self):
+    def periodic_gui_update(self) -> None:
         """GUI update loop responsible for showing new cell generations."""
         if not self.gui_paused:
             self.update_gui()
 
         self.master.after(self.gui_sleep, self.periodic_gui_update)
 
-    def update_gui(self):
+    def update_gui(self) -> None:
         """Performs a single step in the GUI update loop."""
         if not self.processor.processed.empty():
             logger.debug("processed not empty, showing img...")

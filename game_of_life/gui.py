@@ -1,7 +1,7 @@
 """Tkinter GUI elements module."""
 import tkinter as tk
 from tkinter import Label, ttk
-from typing import Callable, Optional
+from typing import Any, Callable, Dict, Optional, Tuple, Union
 from loguru import logger
 import numpy as np
 from PIL import ImageTk, Image, ImageColor
@@ -31,23 +31,23 @@ class MenuBar(tk.Menu):
 
         master.config(menu=self)
 
-    def exit_command(self):
+    def exit_command(self) -> None:
         """Closes the game."""
         self.master.destroy()
         logger.debug("<QUIT>")
 
-    def settings_command(self):
+    def settings_command(self) -> None:
         logger.info("Opening settings ...")
         settings = SettingsWindow(self.master)
         settings.grab_set()
 
-    def about_command(self):
+    def about_command(self) -> None:
         pass
 
 
 class SettingsWindow(tk.Toplevel):
     """Settings window."""
-    def __init__(self, master):
+    def __init__(self, master: tk.Misc):
         super().__init__(master)
         self.title("Settings")
         self.resizable(False, False)
@@ -67,7 +67,7 @@ class SettingsWindow(tk.Toplevel):
         self.cancel_button = tk.Button(self, text="cancel", padx=10, command=self.cancel_command)
         self.cancel_button.grid(row=2, column=2,  sticky=tk.E, padx=10, pady=10)
 
-    def _init_settings(self):
+    def _init_settings(self) -> dict:
         settings = dict()
 
         # Game settings
@@ -95,7 +95,7 @@ class SettingsWindow(tk.Toplevel):
 
         return settings
 
-    def ok_command(self):
+    def ok_command(self) -> None:
         for _, setting in self.settings.items():
             try:
                 setting.save_to_config()
@@ -106,10 +106,10 @@ class SettingsWindow(tk.Toplevel):
 
         self.destroy()
 
-    def cancel_command(self):
+    def cancel_command(self) -> None:
         self.destroy()
 
-    def reset_command(self):
+    def reset_command(self) -> None:
         for _, setting in self.settings.items():
             setting.reset_default()
 
@@ -134,7 +134,7 @@ class MessageWindow(tk.Toplevel):
 
 
 class Option(tk.Frame):
-    def __init__(self, master, config_item: tuple, label: str, validation_fn: Optional[Callable] = None):
+    def __init__(self, master: tk.Misc, config_item: tuple, label: str, validation_fn: Optional[Callable] = None) -> None:
         super().__init__(master)
         self.master = master
         # pairing with an item in the config file
@@ -149,14 +149,10 @@ class Option(tk.Frame):
         self.entry.grid(row=0, column=1, sticky=tk.E, padx=10)
         self.columnconfigure(1, weight=1)
 
-    def get_value(self):
+    def get_value(self) -> Any:
         return self.entry.get()
 
-    def set_value(self, value):
-        self._validate_value()
-        self.entry.set(value)
-
-    def save_to_config(self):
+    def save_to_config(self) -> None:
         if self.validation_fn is not None:
             try:
                 value = self.entry.get()
@@ -166,13 +162,14 @@ class Option(tk.Frame):
                 logger.error(error_msg)
                 raise ValueError(error_msg)
 
-        config.set(*self.conf_item, value=str(value))
+        section, option = self.conf_item
+        config.set(section, option, value=str(value))
         with open(config_path, 'w') as configfile:
             config.write(configfile)
 
         logger.debug(f"Saved {value} to {self.conf_item} option.")
 
-    def reset_default(self):
+    def reset_default(self) -> None:
         self.entry.delete(0, 'end')
         self.entry.insert('0', default_config.get(*self.conf_item))
 
@@ -180,12 +177,21 @@ class Option(tk.Frame):
 
 class Grid(tk.Canvas):
     """Canvas displaying grid and alive/dead cells."""
-    def __init__(self, master, size, num_units, background_color, foreground_color, edge_color, *args, **kwargs):
-        super(Grid, self).__init__(master, width=size + 1, height=size + 1, *args, **kwargs)
+    def __init__(
+        self, 
+        master: tk.Misc, 
+        dim: int, 
+        num_units: int, 
+        background_color: tuple,  
+        foreground_color: tuple, 
+        edge_color: str, 
+        *args: Any, **kwargs: Any
+    ) -> None:
+        super(Grid, self).__init__(master, width=dim + 1, height=dim + 1, *args, **kwargs)
         self.edge_color = edge_color
         self.num_units = num_units
-        self.unit_size = size / num_units
-        self.size = size
+        self.unit_size = dim / num_units
+        self.dim = dim
         self.background = np.dstack([
             np.ones((self.num_units, self.num_units)),
             np.ones((self.num_units, self.num_units)),
@@ -199,25 +205,25 @@ class Grid(tk.Canvas):
         self.cells = self.create_image(0, 0, anchor=tk.NW, image=None, tag="cells")
         self.cell_img = None
 
-    def draw_grid(self):
+    def draw_grid(self) -> None:
         self.delete('grid')
         for unit in range(self.num_units):
             pos = unit * self.unit_size
-            self.create_line(0, pos, self.size, pos, fill=self.edge_color, tag="grid")
-            self.create_line(pos, 0, pos, self.size, fill=self.edge_color, tag="grid")
+            self.create_line(0, pos, self.dim, pos, fill=self.edge_color, tag="grid")
+            self.create_line(pos, 0, pos, self.dim, fill=self.edge_color, tag="grid")
 
-    def draw_array(self, cell_array):
+    def draw_array(self, cell_array: np.ndarray) -> None:
         image = Image.fromarray(255 * (1 - cell_array.astype(np.uint8)))
         image = image.resize(size=(self.size, self.size), resample=Image.NEAREST)
         self.cell_img = ImageTk.PhotoImage(image)
         self.itemconfig("cells", image=self.cell_img)
         self.tag_lower("cells")
 
-    def draw_img(self, cell_img):
+    def draw_img(self, cell_img: ImageTk.PhotoImage) -> None:
         self.itemconfig("cells", image=cell_img)
         self.tag_lower("cells")
 
-    def coords_to_grid_position(self, x, y):
+    def coords_to_grid_position(self, x: int, y: int) -> Tuple[int, int]:
         i = int(y // self.unit_size)
         j = int(x // self.unit_size)
         return i, j
@@ -236,13 +242,13 @@ class GameOfLifeGUI:
         self.widgets = self._init_widgets()
 
         # canvas update related params
-        self.cells = None
-        self.last_time = None
+        self.cells: tk.PhotoImage
+        self.last_time: float
         self.current_time = time.perf_counter()
 
         logger.info("GUI initialized ...")
 
-    def _init_widgets(self):
+    def _init_widgets(self) -> dict:
         widgets = dict()
 
         # menu bar
@@ -251,7 +257,7 @@ class GameOfLifeGUI:
         # grid canvas
         widgets["grid"] = Grid(
             master=self.master,
-            size=config.getint("GRID", "SIZE"),
+            dim=config.getint("GRID", "SIZE"),
             num_units=config.getint("GRID", "UNITS"),
             background_color=ImageColor.getrgb(config["GRID"]["BACKGROUND"]),
             foreground_color=ImageColor.getrgb(config["GRID"]["FOREGROUND"]),
@@ -263,13 +269,13 @@ class GameOfLifeGUI:
 
         return widgets
 
-    def _show_fps(self):
+    def _show_fps(self) -> None:
         self.last_time = self.current_time
         self.current_time = time.perf_counter()
         elapsed = self.current_time - self.last_time
         self.master.title(f"Game of Life ({int(1 / elapsed)} FPS)")
 
-    def show_cells(self, cells):
+    def show_cells(self, cells: tk.PhotoImage) -> None:
         """Handle all cell images currently in the queue, if any."""
         self._show_fps()
         self.cells = cells
