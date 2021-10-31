@@ -1,13 +1,14 @@
 """Tkinter GUI elements module."""
 import tkinter as tk
-from tkinter import Label, ttk
+from tkinter import Label, Text, ttk
 from typing import Any, Callable, Dict, Optional, Tuple, Union
 from loguru import logger
 import numpy as np
 from PIL import ImageTk, Image, ImageColor
 import time
+import webbrowser
 
-from game_of_life import config, config_path, default_config
+from game_of_life import config, config_path, default_config, project
 
 
 class MenuBar(tk.Menu):
@@ -27,7 +28,7 @@ class MenuBar(tk.Menu):
 
         self.help_menu = tk.Menu(self, tearoff=0)
         self.add_cascade(label="Help", menu=self.help_menu)
-        self.help_menu.add_command(label="About")
+        self.help_menu.add_command(label="About", command=self.about_command)
 
         master.config(menu=self)
 
@@ -42,7 +43,9 @@ class MenuBar(tk.Menu):
         settings.grab_set()
 
     def about_command(self) -> None:
-        pass
+        logger.info("Opening help ...")
+        settings = AboutWindow(self.master)
+        settings.grab_set()
 
 
 class SettingsWindow(tk.Toplevel):
@@ -131,6 +134,40 @@ class MessageWindow(tk.Toplevel):
         self.ok_button = tk.Button(self, text="OK", padx=20, command=self.destroy)
         self.ok_button.grid(row=1, column=0, padx=10, pady=10)
 
+
+class AboutWindow(tk.Toplevel):
+    def __init__(self, master: tk.Misc):
+        super().__init__(master)
+        self.title("About")
+        self.geometry("250x200")
+        self.resizable(False, False)
+        self.grab_set()
+
+        title_text = "Game of Life"
+        title = ttk.Label(self, text=title_text, font=("Arial",16))
+        title.grid(row = 0, column = 0, padx=30, pady=10, sticky=tk.W)
+
+        info_text = self._generate_info()
+        info = ttk.Label(self, text=info_text)
+        info.grid(row = 2, column = 0, sticky=tk.W)
+
+    def _generate_info(self) -> str:
+        """Generates info string based on content of the project toml file."""        
+        # get author and email
+        author_info = project["tool.poetry"]["authors"].strip('[""]')
+        author_info = author_info.replace(">", "")
+        author, email = author_info.split(" <")
+
+        # get version
+        version = project["tool.poetry"]["version"].strip('"')
+
+        info_text = f"""
+            Author: {author} \n
+            Email: {email} \n
+            Version: {version}
+        """
+
+        return info_text
 
 
 class Option(tk.Frame):

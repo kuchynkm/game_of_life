@@ -17,6 +17,12 @@ default_config_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), r
 default_config = ConfigParser()
 default_config.read(default_config_path)
 
+# project toml file
+relative_project_path = os.path.join("..", "pyproject.toml")
+project_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), relative_project_path)
+project = ConfigParser()
+project.read(project_path)
+
 # logger
 LOGGER_LEVEL = config["LOGGER"]["LEVEL"]
 logger.remove()
