@@ -11,9 +11,14 @@ config_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), relative_
 config = ConfigParser()
 config.read(config_path)
 
+# default configuration
+relative_default_config_path = os.path.join("config", "default.ini")
+default_config_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), relative_default_config_path)
+default_config = ConfigParser()
+default_config.read(default_config_path)
+
 # logger
 LOGGER_LEVEL = config["LOGGER"]["LEVEL"]
 logger.remove()
 logger.add(sys.stderr, level=LOGGER_LEVEL)
-
 logger.info("read config from init ...")

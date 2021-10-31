@@ -6,4 +6,3 @@ if __name__ == '__main__':
     root = Tk()
     client = GameOfLife(root)
     root.mainloop()
-
