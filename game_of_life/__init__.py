@@ -20,7 +20,7 @@ default_config_path = os.path.join(package_dir, relative_default_config_path)
 default_config = ConfigParser()
 default_config.read(default_config_path)
 
-# project toml file
+# project file
 relative_project_path = os.path.join("..", "pyproject.toml")
 project_path = os.path.join(package_dir, relative_project_path)
 project = ConfigParser()

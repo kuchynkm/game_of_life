@@ -45,7 +45,7 @@ class MenuBar(tk.Menu):
         logger.debug("<PREFERENCES>")
 
     def help_command(self) -> None:
-        url = project["tool.poetry"]["repository"].strip('""')
+        url = default_config["INFO"]["REPOSITORY"]
         webbrowser.open(url)
         logger.debug("<HELP>")
 
@@ -162,14 +162,17 @@ class AboutWindow(tk.Toplevel):
         info.grid(row = 2, column = 0, sticky=tk.W)
 
     def _generate_info(self) -> str:
-        """Generates info string based on content of the project TOML file."""        
+        """Generates info string."""        
         # get author and email
-        author_info = project["tool.poetry"]["authors"].strip('[""]')
-        author_info = author_info.replace(">", "")
-        author, email = author_info.split(" <")
+        author = default_config["INFO"]["AUTHOR"]
+        email = default_config["INFO"]["EMAIL"]
+        version = default_config["INFO"]["VERSION"]
+        # author_info = project["tool.poetry"]["authors"].strip('[""]')
+        # author_info = author_info.replace(">", "")
+        # author, email = author_info.split(" <")
 
         # get version
-        version = project["tool.poetry"]["version"].strip('"')
+        # version = project["tool.poetry"]["version"].strip('"')
 
         info_text = f"""
             Author: {author} \n
