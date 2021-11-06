@@ -83,12 +83,15 @@ class SettingsWindow(tk.Toplevel):
         # Game settings
         game_settings = ttk.LabelFrame(self, text="Game")
         game_settings.grid(column=0, row=0, padx=20, pady=5, sticky=tk.W)
+        # Dimensions of the window   
+        settings["dim"] = Option(game_settings, config_item=("GRID", "SIZE"), label="Dimensions of the window", validation_fn=int)
+        settings["dim"].grid(row=0, column=0, sticky=tk.EW)
         # Number of units   
         settings["units"] = Option(game_settings, config_item=("GRID", "UNITS"), label="Number of units", validation_fn=int)
-        settings["units"].grid(row=0, column=0, sticky=tk.EW)
+        settings["units"].grid(row=1, column=0, sticky=tk.EW)
         # FPS
         settings["fps"] = Option(game_settings, config_item=("APP", "MAX_FPS"), label="Maximum FPS", validation_fn=int)
-        settings["fps"].grid(row=1, column=0, sticky=tk.EW)
+        settings["fps"].grid(row=2, column=0, sticky=tk.EW)
 
         # Graphics settings
         graphics = ttk.LabelFrame(self, text="Graphics")
