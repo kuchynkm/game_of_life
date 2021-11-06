@@ -1,5 +1,4 @@
 import tkinter as tk
-from typing import Any, Dict, List
 
 import numpy as np
 
@@ -8,6 +7,7 @@ from game_of_life.gui import GameOfLifeGUI
 from game_of_life.processing import ProcessingThread, Message
 
 
+# TODO clean up the unnecessary logging
 class GameOfLife:
 
     def __init__(self, master: tk.Tk):
@@ -25,15 +25,15 @@ class GameOfLife:
         communicate with worker thread.
         """
         self.master = master
-        self.master.bind("<KeyPress>", self.keypress_handler)
+        self.master.bind("<KeyPress>", self._keypress_handler)
 
         # GUI setup
         self.gui = GameOfLifeGUI(master)
         self.gui.widgets["menubar"].file_menu.entryconfigure(0, command=self.restart_game)
-        self.gui.widgets["grid"].bind("<Button-1>", lambda x: self.edit_cell(x, alive=True))
-        self.gui.widgets["grid"].bind("<B1-Motion>", lambda x: self.edit_cell(x, alive=True))
-        self.gui.widgets["grid"].bind("<Button-3>", lambda x: self.edit_cell(x, alive=False))
-        self.gui.widgets["grid"].bind("<B3-Motion>", lambda x: self.edit_cell(x, alive=False))
+        self.gui.widgets["grid"].bind("<Button-1>", lambda x: self._edit_cell(x, alive=True))
+        self.gui.widgets["grid"].bind("<B1-Motion>", lambda x: self._edit_cell(x, alive=True))
+        self.gui.widgets["grid"].bind("<Button-3>", lambda x: self._edit_cell(x, alive=False))
+        self.gui.widgets["grid"].bind("<B3-Motion>", lambda x: self._edit_cell(x, alive=False))
         self.gui.widgets["grid"].bind("<ButtonRelease-1>", self._process_shown)
         self.gui.widgets["grid"].bind("<ButtonRelease-3>", self._process_shown)
         self.gui_sleep = int(1000 / config.getint("APP", "MAX_FPS"))
@@ -49,7 +49,7 @@ class GameOfLife:
         self.master.after(100, self.periodic_gui_update)
         logger.info("Game of Life initialized ...")
 
-    def keypress_handler(self, event: tk.Event) -> None:
+    def _keypress_handler(self, event: tk.Event) -> None:
         """Handles key-press events."""
         char = event.keysym.lower()
         logger.debug(f"{char} pressed ...")
@@ -57,12 +57,17 @@ class GameOfLife:
         actions = {
             config["APP"]["PAUSE_GAME_KEY"]: self.pause_game,
             config["APP"]["RESTART_GAME_KEY"]: self.restart_game,
+            config["APP"]["NEXT_STEP_KEY"]: self._next_step,
+            config["APP"]["ERASE_CELLS_KEY"]: self._erase_cells,
             config["APP"]["QUIT_GAME_KEY"]: self.gui.widgets["menubar"].exit_command,
-            config["APP"]["NEXT_STEP_KEY"]: self.next_step,
-            config["APP"]["ERASE_CELLS_KEY"]: self.erase_cells,
+            config["APP"]["SETTINGS_KEY"]: self.gui.widgets["menubar"].settings_command,
+            config["APP"]["ABOUT_KEY"]: self.gui.widgets["menubar"].about_command,
         }
 
         actions.get(char, lambda *args: None).__call__()
+
+    # def _apply_settings(self):
+    #     self.gui.widgets["menubar"].
 
     def pause_game(self) -> None:
         """Pauses the game."""
@@ -80,19 +85,19 @@ class GameOfLife:
         self.gui_paused = False
         logger.debug("<RESTART>")
 
-    def erase_cells(self) -> None:
+    def _erase_cells(self) -> None:
         """Erases all living cells in the game."""
         self.processor.msg_queue.put(Message(Message.CLEAN_INIT))
         self.processor.flush_processed()
         self.gui_paused = False
         logger.debug("<CELLS ERASED>")
 
-    def next_step(self) -> None:
+    def _next_step(self) -> None:
         """Pauses the game and performs a single next step."""
         self.gui_paused = True
-        self.update_gui()
+        self._update_gui()
 
-    def edit_cell(self, event: tk.Event, alive: bool) -> None:
+    def _edit_cell(self, event: tk.Event, alive: bool) -> None:
         """Edits cell status at the given position."""
         self.gui_paused = True
         cell_array = self.shown
@@ -119,11 +124,11 @@ class GameOfLife:
     def periodic_gui_update(self) -> None:
         """GUI update loop responsible for showing new cell generations."""
         if not self.gui_paused:
-            self.update_gui()
+            self._update_gui()
 
         self.master.after(self.gui_sleep, self.periodic_gui_update)
 
-    def update_gui(self) -> None:
+    def _update_gui(self) -> None:
         """Performs a single step in the GUI update loop."""
         if not self.processor.processed.empty():
             logger.debug("processed not empty, showing img...")

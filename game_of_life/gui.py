@@ -1,7 +1,7 @@
 """Tkinter GUI elements module."""
 import tkinter as tk
-from tkinter import Label, Text, ttk
-from typing import Any, Callable, Dict, Optional, Tuple, Union
+from tkinter import Label, ttk
+from typing import Any, Callable, Optional, Tuple
 from loguru import logger
 import numpy as np
 from PIL import ImageTk, Image, ImageColor
@@ -23,11 +23,12 @@ class MenuBar(tk.Menu):
         self.file_menu.add_command(label="Quit (Q)", command=self.exit_command)
 
         self.settings_menu = tk.Menu(self, tearoff=0)
-        self.add_cascade(label="Settings", menu=self.settings_menu)
-        self.settings_menu.add_command(label="Game settings", command=self.settings_command)
+        self.add_cascade(label="Edit", menu=self.settings_menu)
+        self.settings_menu.add_command(label="Preferences (S)", command=self.settings_command)
 
         self.help_menu = tk.Menu(self, tearoff=0)
         self.add_cascade(label="Help", menu=self.help_menu)
+        self.help_menu.add_command(label="Homepage", command=self.help_command)
         self.help_menu.add_command(label="About", command=self.about_command)
 
         master.config(menu=self)
@@ -38,14 +39,19 @@ class MenuBar(tk.Menu):
         logger.debug("<QUIT>")
 
     def settings_command(self) -> None:
-        logger.info("Opening settings ...")
         settings = SettingsWindow(self.master)
         settings.grab_set()
+        logger.debug("<PREFERENCES>")
+
+    def help_command(self) -> None:
+        url = project["tool.poetry"]["repository"].strip('""')
+        webbrowser.open(url)
+        logger.debug("<HELP>")
 
     def about_command(self) -> None:
-        logger.info("Opening help ...")
         settings = AboutWindow(self.master)
         settings.grab_set()
+        logger.debug("<ABOUT>")
 
 
 class SettingsWindow(tk.Toplevel):
@@ -99,29 +105,31 @@ class SettingsWindow(tk.Toplevel):
         return settings
 
     def ok_command(self) -> None:
+        """Saves the current configuration to config file and closed the settings window."""
         for _, setting in self.settings.items():
             try:
                 setting.save_to_config()
             except ValueError as e:
-                error_msg = str(e)
-                MessageWindow(self.master, msg_type="Error", msg=error_msg)
+                MessageWindow(self.master, msg_type="Error", msg=str(e))
                 return
 
+        msg = "New settings will take effect next time you open the application."
+        MessageWindow(self.master, msg_type="Info", msg=str(msg))
         self.destroy()
 
     def cancel_command(self) -> None:
+        """Discards changes and closes the settings window."""
         self.destroy()
 
     def reset_command(self) -> None:
+        """Resets the settings to default and closes the settings window."""
         for _, setting in self.settings.items():
             setting.reset_default()
-
-        # with open(config_path, 'w') as configfile:
-        #     default_config.write(configfile)
-        logger.info("Reset config to default.")
+        logger.info("Config reset to default.")
 
 
 class MessageWindow(tk.Toplevel):
+    """Generic top-level window displaying a message."""
     def __init__(self, master: tk.Misc, msg_type: str, msg: str):
         super().__init__(master)
         self.title(msg_type)
@@ -136,6 +144,7 @@ class MessageWindow(tk.Toplevel):
 
 
 class AboutWindow(tk.Toplevel):
+    """Window displaying basic info about the app."""
     def __init__(self, master: tk.Misc):
         super().__init__(master)
         self.title("About")
@@ -152,7 +161,7 @@ class AboutWindow(tk.Toplevel):
         info.grid(row = 2, column = 0, sticky=tk.W)
 
     def _generate_info(self) -> str:
-        """Generates info string based on content of the project toml file."""        
+        """Generates info string based on content of the project TOML file."""        
         # get author and email
         author_info = project["tool.poetry"]["authors"].strip('[""]')
         author_info = author_info.replace(">", "")
@@ -171,6 +180,7 @@ class AboutWindow(tk.Toplevel):
 
 
 class Option(tk.Frame):
+    """Option as a pair composed of a label and an entry."""
     def __init__(self, master: tk.Misc, config_item: tuple, label: str, validation_fn: Optional[Callable] = None) -> None:
         super().__init__(master)
         self.master = master
