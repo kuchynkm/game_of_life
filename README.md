@@ -1,7 +1,7 @@
 # Game of life
 Visualization of Conway's Game of Life with Python and Tkinter. 
 
-![Alt Text](resources/game.gif)
+![game preview](resources/game.gif)
 
 
 ## How to install
@@ -34,3 +34,9 @@ By left-click on a cell, it becomes alive. Right-click causes alive cell to die.
 To perform next evolution step, hit `N`.
 
 To exit the edit mode, unpause the game by hitting `SPACEBAR` or `P`.
+
+### Settings
+
+It is possible to change appearance as well as behavior to an extent.
+
+![settings preview](resources/settings.png)
