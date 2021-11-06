@@ -1,4 +1,5 @@
 """Tkinter GUI elements module."""
+import os
 import tkinter as tk
 from tkinter import Label, ttk
 from typing import Any, Callable, Optional, Tuple
@@ -8,7 +9,7 @@ from PIL import ImageTk, Image, ImageColor
 import time
 import webbrowser
 
-from game_of_life import config, config_path, default_config, project
+from game_of_life import package_dir, config, config_path, default_config, project
 
 
 class MenuBar(tk.Menu):
@@ -282,7 +283,8 @@ class GameOfLifeGUI:
     def __init__(self, master: tk.Tk):
         self.master = master
         self.master.title(f"Game of Life")
-        self.master.iconphoto(True, tk.PhotoImage(file="game_of_life/resources/images/icon.png"))
+        icon_path = os.path.join(package_dir, "resources/images/icon.png")
+        self.master.iconphoto(True, tk.PhotoImage(file=icon_path))
         self.master.resizable(False, False)
 
         # initialize widgets
