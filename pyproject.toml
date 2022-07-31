@@ -7,7 +7,7 @@ repository = "https://github.com/kuchynkm/game_of_life"
 readme = "README.md"
 
 [tool.poetry.dependencies]
-python = "3.9.7"
+python = "~3.9"
 numpy = "^1.21.5"
 Pillow = "^8.3.2"
 scipy = "^1.8.1"
